@@ -20,13 +20,16 @@ TABLE_RECT = pygame.Rect(
 BALL_RADIUS = 15
 POCKET_RADIUS = 28
 
-FRICTION = 230.0
-MIN_SPEED = 8.0
-WALL_BOUNCE = 0.92
-BALL_COLLISION_DAMP = 0.98
-SHOT_POWER_SCALE = 6.0
-MAX_SHOT_SPEED = 1100.0
-MIN_SHOT_SPEED = 25.0
+FRICTION = 125.0
+MIN_SPEED = 5.0
+WALL_BOUNCE = 0.9
+BALL_COLLISION_DAMP = 0.97
+SHOT_POWER_SCALE = 5.2
+MAX_SHOT_SPEED = 950.0
+MIN_SHOT_SPEED = 35.0
+MAX_PULL_DISTANCE = 180.0
+GUIDE_LENGTH = 160.0
+MAX_FOULS = 3
 
 PHASE_AIM = "aim"
 PHASE_MOVING = "moving"
@@ -75,6 +78,7 @@ class GameState:
     fouls: int = 0
     phase: str = PHASE_AIM
     charging: bool = False
+    round_title: str = ""
     round_message: str = ""
 
 
@@ -108,6 +112,7 @@ def reset_round(state: GameState) -> None:
     state.fouls = 0
     state.phase = PHASE_AIM
     state.charging = False
+    state.round_title = ""
     state.round_message = ""
 
 
@@ -239,9 +244,17 @@ def settle_round_if_needed(state: GameState) -> None:
         if ball.active:
             ball.vel.update(0, 0)
 
+    if state.fouls >= MAX_FOULS:
+        state.phase = PHASE_ROUND_OVER
+        state.round_title = "Round Lost"
+        state.round_message = f"Too many fouls ({state.fouls}/{MAX_FOULS}). Press R to restart."
+        state.charging = False
+        return
+
     if target_balls_remaining(state) == 0:
         state.phase = PHASE_ROUND_OVER
-        state.round_message = "Target cleared. Press R to restart."
+        state.round_title = "Round Won"
+        state.round_message = f"Target cleared in {state.shot_count} shots. Press R to restart."
         state.charging = False
         return
 
@@ -262,18 +275,28 @@ def update_physics(state: GameState, dt: float) -> None:
     settle_round_if_needed(state)
 
 
-def current_shot_power(state: GameState, mouse_pos: tuple[int, int]) -> float:
+def shot_pull_vector(state: GameState, mouse_pos: tuple[int, int]) -> pygame.Vector2:
     pull = cue_ball(state).pos - pygame.Vector2(mouse_pos)
+    if pull.length_squared() == 0:
+        return pygame.Vector2()
+    if pull.length() > MAX_PULL_DISTANCE:
+        pull.scale_to_length(MAX_PULL_DISTANCE)
+    return pull
+
+
+def current_shot_power(state: GameState, mouse_pos: tuple[int, int]) -> float:
+    pull = shot_pull_vector(state, mouse_pos)
     return min(pull.length() * SHOT_POWER_SCALE, MAX_SHOT_SPEED)
 
 
 def strike_cue_ball(state: GameState, mouse_pos: tuple[int, int]) -> None:
     cue = cue_ball(state)
-    pull = cue.pos - pygame.Vector2(mouse_pos)
+    pull = shot_pull_vector(state, mouse_pos)
     if pull.length_squared() == 0:
         return
 
-    shot_speed = min(pull.length() * SHOT_POWER_SCALE, MAX_SHOT_SPEED)
+    normalized_pull = pull.length() / MAX_PULL_DISTANCE
+    shot_speed = min((normalized_pull ** 1.15) * MAX_SHOT_SPEED, MAX_SHOT_SPEED)
     if shot_speed < MIN_SHOT_SPEED:
         return
 
@@ -329,11 +352,11 @@ def draw_aim_guide(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
         return
 
     cue = cue_ball(state)
-    pull = cue.pos - pygame.Vector2(mouse_pos)
+    pull = shot_pull_vector(state, mouse_pos)
     if pull.length_squared() == 0:
         return
 
-    guide_len = min(140, pull.length())
+    guide_len = min(GUIDE_LENGTH, pull.length())
     line_end = cue.pos + pull.normalize() * guide_len
     pygame.draw.line(
         screen,
@@ -342,6 +365,7 @@ def draw_aim_guide(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
         (int(line_end.x), int(line_end.y)),
         2,
     )
+    pygame.draw.circle(screen, AIM_COLOR, (int(line_end.x), int(line_end.y)), 4)
 
 
 def draw_power_bar(screen: pygame.Surface, state: GameState, mouse_pos: tuple[int, int]) -> None:
@@ -364,11 +388,15 @@ def draw_hud(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -
     elif state.phase == PHASE_MOVING:
         status = "Balls moving"
     else:
-        status = "Round over"
+        status = state.round_title or "Round over"
 
     hud = f"{status} | Shots: {state.shot_count} | Pocketed: {state.balls_pocketed} | Fouls: {state.fouls}"
     text_surf = font.render(hud, True, TEXT_COLOR)
     screen.blit(text_surf, (TABLE_RECT.left, 20))
+
+    hint = f"Hold LMB and pull to aim. Fouls: {MAX_FOULS} loses the round. Press R to restart."
+    hint_surf = font.render(hint, True, TEXT_COLOR)
+    screen.blit(hint_surf, (TABLE_RECT.left, HEIGHT - 70))
 
 
 def draw_round_overlay(
@@ -384,7 +412,8 @@ def draw_round_overlay(
     overlay.fill(OVERLAY_COLOR)
     screen.blit(overlay, (0, 0))
 
-    title = title_font.render("Round Complete", True, TEXT_COLOR)
+    title_text = state.round_title or "Round Complete"
+    title = title_font.render(title_text, True, TEXT_COLOR)
     message = body_font.render(state.round_message, True, TEXT_COLOR)
 
     title_rect = title.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 18))
