@@ -164,17 +164,23 @@ def draw_power_bar(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
 
 def draw_hud(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:
     if state.phase == PHASE_AIM:
-        status = "Your turn"
+        status = f"Player {state.current_player + 1} aim"
     elif state.phase == PHASE_MOVING:
         status = "Balls moving"
     else:
         status = state.round_title or "Round over"
 
-    hud = f"{status} | Shots: {state.shot_count} | Pocketed: {state.balls_pocketed} | Fouls: {state.fouls}"
+    hud = (
+        f"{status} | Score P1:{state.scores[0]} P2:{state.scores[1]} | "
+        f"Shots: {state.shot_count} | Pocketed total: {state.balls_pocketed} | Fouls: {state.fouls}"
+    )
     screen.blit(font.render(hud, True, TEXT_COLOR), (TABLE_RECT.left, 20))
 
-    hint = f"Hold LMB and pull to aim. Fouls: {MAX_FOULS} loses the round. Press R to restart."
-    screen.blit(font.render(hint, True, TEXT_COLOR), (TABLE_RECT.left, HEIGHT - 70))
+    info = state.info_message or "Right click a ball to set it as cue. LMB drag to shoot."
+    screen.blit(font.render(info, True, TEXT_COLOR), (TABLE_RECT.left, HEIGHT - 70))
+
+    hint = f"Foul if cue misses contact. Penalty: one of your pocketed balls returns. {MAX_FOULS} fouls ends the round."
+    screen.blit(font.render(hint, True, TEXT_COLOR), (TABLE_RECT.left, HEIGHT - 40))
 
 
 def draw_round_overlay(
@@ -209,4 +215,3 @@ def render(
     draw_power_bar(screen, state, mouse_pos)
     draw_hud(screen, hud_font, state)
     draw_round_overlay(screen, title_font, hud_font, state)
-    pygame.display.flip()

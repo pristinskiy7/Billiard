@@ -53,22 +53,52 @@ def handle_wall_bounce(ball: Ball) -> None:
             ball.vel.y = -abs(ball.vel.y) * WALL_BOUNCE
 
 
+def is_position_free(state: GameState, pos: pygame.Vector2) -> bool:
+    margin = BALL_RADIUS_MM + 4.0
+    if not (margin <= pos.x <= TABLE_WIDTH_MM - margin and margin <= pos.y <= TABLE_HEIGHT_MM - margin):
+        return False
+
+    probe = Ball(name="_probe", pos=pos, vel=pygame.Vector2(), color=(0, 0, 0), is_cue=False, active=True)
+    if is_ball_in_pocket_corridor(probe):
+        return False
+
+    min_dist_sq = BALL_DIAMETER_MM * BALL_DIAMETER_MM
+    for ball in state.balls:
+        if not ball.active:
+            continue
+        if (ball.pos - pos).length_squared() < min_dist_sq:
+            return False
+    return True
+
+
+def find_safe_spot(state: GameState, preferred: pygame.Vector2) -> pygame.Vector2:
+    step = BALL_DIAMETER_MM + 8.0
+    offsets = [pygame.Vector2()]
+
+    for ring in range(1, 7):
+        for dx in range(-ring, ring + 1):
+            for dy in range(-ring, ring + 1):
+                if max(abs(dx), abs(dy)) != ring:
+                    continue
+                offsets.append(pygame.Vector2(dx * step, dy * step))
+
+    for offset in offsets:
+        candidate = preferred + offset
+        if is_position_free(state, candidate):
+            return candidate
+
+    return preferred
+
+
+def place_ball_safely(state: GameState, ball: Ball, preferred: pygame.Vector2) -> None:
+    ball.active = True
+    ball.vel.update(0, 0)
+    ball.pos = find_safe_spot(state, preferred)
+
+
 def place_cue_ball(state: GameState) -> None:
     cue = cue_ball(state)
-    cue.active = True
-    cue.pos = BLACK_START_POS.copy()
-    cue.vel.update(0, 0)
-
-    min_dist = BALL_DIAMETER_MM
-    for ball in state.balls:
-        if ball is cue or not ball.active:
-            continue
-
-        delta = ball.pos - cue.pos
-        if delta.length_squared() == 0:
-            delta = pygame.Vector2(1, 0)
-        if delta.length_squared() < min_dist * min_dist:
-            ball.pos = cue.pos + delta.normalize() * (min_dist + 1)
+    place_ball_safely(state, cue, BLACK_START_POS)
 
 
 def update_ball(ball: Ball, dt: float) -> None:
@@ -86,7 +116,8 @@ def update_ball(ball: Ball, dt: float) -> None:
         ball.vel.scale_to_length(new_speed)
 
 
-def resolve_ball_collisions(balls: list[Ball]) -> None:
+def resolve_ball_collisions(state: GameState) -> None:
+    balls = state.balls
     min_dist = BALL_DIAMETER_MM
 
     for index, ball_a in enumerate(balls):
@@ -113,6 +144,9 @@ def resolve_ball_collisions(balls: list[Ball]) -> None:
             ball_a.pos -= correction
             ball_b.pos += correction
 
+            if ball_a.is_cue or ball_b.is_cue:
+                state.shot_had_contact = True
+
             v1n = ball_a.vel.dot(normal)
             v2n = ball_b.vel.dot(normal)
             rel = v1n - v2n
@@ -135,11 +169,26 @@ def check_pockets(state: GameState) -> None:
 
         if ball.is_cue:
             state.fouls += 1
+            state.shot_foul = True
             place_cue_ball(state)
         else:
             state.balls_pocketed += 1
+            state.scores[state.current_player] += 1
+            state.pocketed_by_player[state.current_player].append(ball)
+            state.shot_pocketed += 1
             ball.active = False
             ball.vel.update(0, 0)
+
+
+def respot_from_penalty(state: GameState) -> None:
+    player = state.current_player
+    if not state.pocketed_by_player[player]:
+        return
+
+    ball = state.pocketed_by_player[player].pop()
+    state.scores[player] = max(0, state.scores[player] - 1)
+    place_ball_safely(state, ball, BLACK_START_POS)
+    state.info_message = f"Player {player + 1} foul: respotted ball {ball.name}"
 
 
 def settle_round_if_needed(state: GameState) -> None:
@@ -150,22 +199,45 @@ def settle_round_if_needed(state: GameState) -> None:
         if ball.active:
             ball.vel.update(0, 0)
 
-    if state.fouls >= MAX_FOULS:
+    shot_no_contact = not state.shot_had_contact
+    foul_this_shot = state.shot_foul or shot_no_contact
+
+    if foul_this_shot:
+        if shot_no_contact and not state.shot_foul:
+            state.info_message = "Foul: cue ball made no contact"
+        state.fouls += int(not state.shot_foul)  # only add if not already counted
+        respot_from_penalty(state)
+
+    if target_balls_remaining(state) == 0:
+        winner = 1 if state.scores[1] > state.scores[0] else 0
+        if state.scores[0] == state.scores[1]:
+            state.round_title = "Draw"
+            state.round_message = f"Tie game {state.scores[0]}:{state.scores[1]}. Press R to restart."
+        else:
+            state.round_title = f"Player {winner + 1} Wins"
+            state.round_message = (
+                f"Final score {state.scores[0]}:{state.scores[1]} in {state.shot_count} shots. Press R to restart."
+            )
+        state.phase = PHASE_ROUND_OVER
+        state.charging = False
+    elif state.fouls >= MAX_FOULS:
         state.phase = PHASE_ROUND_OVER
         state.round_title = "Round Lost"
         state.round_message = f"Too many fouls ({state.fouls}/{MAX_FOULS}). Press R to restart."
         state.charging = False
-        return
-
-    if target_balls_remaining(state) == 0:
-        state.phase = PHASE_ROUND_OVER
-        state.round_title = "Round Won"
-        state.round_message = f"All targets cleared in {state.shot_count} shots. Press R to restart."
+    else:
+        change_turn = foul_this_shot or state.shot_pocketed == 0
+        if change_turn:
+            state.current_player = 1 - state.current_player
+            state.info_message = f"Player {state.current_player + 1} to shoot"
+        else:
+            state.info_message = f"Player {state.current_player + 1} continues"
+        state.phase = PHASE_AIM
         state.charging = False
-        return
 
-    state.phase = PHASE_AIM
-    state.charging = False
+    state.shot_had_contact = False
+    state.shot_pocketed = 0
+    state.shot_foul = False
 
 
 def update_physics(state: GameState, dt: float) -> None:
@@ -176,6 +248,6 @@ def update_physics(state: GameState, dt: float) -> None:
         if ball.active:
             update_ball(ball, dt)
 
-    resolve_ball_collisions(state.balls)
+    resolve_ball_collisions(state)
     check_pockets(state)
     settle_round_if_needed(state)

@@ -7,6 +7,7 @@ from constants import (
     BALL_DIAMETER_MM,
     BLACK_BALL_COLOR,
     BLACK_START_POS,
+    MAX_FOULS,
     PHASE_AIM,
     PYRAMID_APEX_POS,
 )
@@ -32,6 +33,13 @@ class GameState:
     charging: bool = False
     round_title: str = ""
     round_message: str = ""
+    current_player: int = 0
+    scores: list[int] = field(default_factory=lambda: [0, 0])
+    pocketed_by_player: list[list[Ball]] = field(default_factory=lambda: [[], []])
+    shot_had_contact: bool = False
+    shot_pocketed: int = 0
+    shot_foul: bool = False
+    info_message: str = ""
 
 
 def create_balls() -> list[Ball]:
@@ -77,13 +85,28 @@ def reset_round(state: GameState) -> None:
     state.shot_count = 0
     state.balls_pocketed = 0
     state.fouls = 0
+    state.current_player = 0
+    state.scores = [0, 0]
+    state.pocketed_by_player = [[], []]
+    state.info_message = ""
     state.phase = PHASE_AIM
     state.charging = False
     state.round_title = ""
     state.round_message = ""
+    state.shot_had_contact = False
+    state.shot_pocketed = 0
+    state.shot_foul = False
 
 
 def cue_ball(state: GameState) -> Ball:
+    for ball in state.balls:
+        if ball.is_cue:
+            return ball
+    # Fallback: promote the first active ball to be cue if flags got lost
+    for ball in state.balls:
+        if ball.active:
+            ball.is_cue = True
+            return ball
     return state.balls[0]
 
 
@@ -93,3 +116,7 @@ def target_balls_remaining(state: GameState) -> int:
 
 def is_any_ball_moving(state: GameState, min_speed_sq: float) -> bool:
     return any(ball.active and ball.vel.length_squared() > min_speed_sq for ball in state.balls)
+
+
+def is_round_lost(state: GameState) -> bool:
+    return state.fouls >= MAX_FOULS
