@@ -32,7 +32,7 @@ from constants import (
     PHASE_ROUND_OVER,
 )
 from geometry import mm_rect_to_screen, mm_to_px, table_to_screen
-from input import current_shot_power, shot_pull_vector
+from input import aim_vector, current_shot_power
 from models import GameState, cue_ball
 
 
@@ -138,12 +138,12 @@ def draw_aim_guide(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
         return
 
     cue = cue_ball(state)
-    pull = shot_pull_vector(state, mouse_pos)
-    if pull.length_squared() == 0:
+    direction = aim_vector(state, mouse_pos)
+    if direction.length_squared() == 0:
         return
 
-    guide_len = min(GUIDE_LENGTH, pull.length())
-    line_end = cue.pos + pull.normalize() * guide_len
+    guide_len = min(GUIDE_LENGTH, direction.length())
+    line_end = cue.pos + direction.normalize() * guide_len
     pygame.draw.line(screen, AIM_COLOR, table_to_screen(cue.pos), table_to_screen(line_end), 2)
     pygame.draw.circle(screen, AIM_COLOR, table_to_screen(line_end), 4)
 
@@ -158,7 +158,7 @@ def draw_power_bar(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
     if not state.charging or state.phase != PHASE_AIM:
         return
 
-    fill = int((current_shot_power(state, mouse_pos) / MAX_SHOT_SPEED) * bar_width)
+    fill = int((current_shot_power(state) / MAX_SHOT_SPEED) * bar_width)
     pygame.draw.rect(screen, BAR_FILL, (bar_x, bar_y, fill, bar_height), border_radius=8)
 
 
@@ -176,7 +176,10 @@ def draw_hud(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -
     )
     screen.blit(font.render(hud, True, TEXT_COLOR), (TABLE_RECT.left, 20))
 
-    info = state.info_message or "Right click a ball to set it as cue. LMB drag to shoot."
+    info = (
+        state.info_message
+        or "Hold 1+LMB to set cue. Hold 2 to charge, then LMB click to shoot. Ctrl+wheel zoom, Ctrl+LMB pan."
+    )
     screen.blit(font.render(info, True, TEXT_COLOR), (TABLE_RECT.left, HEIGHT - 70))
 
     hint = f"Foul if cue misses contact. Penalty: one of your pocketed balls returns. {MAX_FOULS} fouls ends the round."

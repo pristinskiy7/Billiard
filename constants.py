@@ -45,6 +45,7 @@ MIN_SHOT_SPEED = 90.0
 MAX_PULL_DISTANCE = 420.0
 GUIDE_LENGTH = 360.0
 MAX_FOULS = 3
+CHARGE_RATE = MAX_SHOT_SPEED  # mm/s gain while holding charge key
 
 PHASE_AIM = "aim"
 PHASE_MOVING = "moving"

@@ -40,6 +40,7 @@ class GameState:
     shot_pocketed: int = 0
     shot_foul: bool = False
     info_message: str = ""
+    charge_power: float = 0.0
 
 
 def create_balls() -> list[Ball]:

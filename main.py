@@ -3,7 +3,7 @@ import os
 import pygame
 
 from constants import FPS, HEIGHT, WIDTH
-from input import handle_event
+from input import accumulate_charge, handle_event
 from models import create_initial_state
 from physics import update_physics
 from render import render
@@ -56,7 +56,7 @@ def main() -> int:
             if event.type == pygame.MOUSEWHEEL and mods & pygame.KMOD_CTRL:
                 zoom = max(ZOOM_MIN, min(ZOOM_MAX, zoom * (ZOOM_STEP ** event.y)))
                 continue
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and (mods & pygame.KMOD_ALT):
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and (mods & pygame.KMOD_CTRL):
                 panning = True
                 pan_anchor = event.pos
                 continue
@@ -73,6 +73,7 @@ def main() -> int:
             if not running:
                 break
 
+        accumulate_charge(state, dt)
         update_physics(state, dt)
         render(canvas, hud_font, title_font, state, mouse_pos)
 
