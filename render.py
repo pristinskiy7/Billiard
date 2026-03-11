@@ -160,12 +160,13 @@ def draw_power_overlay_screen(screen: pygame.Surface, font: pygame.font.Font, st
     x = margin
     y = (screen.get_height() - bar_height) // 2
 
-    overlay = pygame.Surface((bar_width + 140, bar_height + 32), pygame.SRCALPHA)
+    overlay = pygame.Surface((bar_width + 220, bar_height + 48), pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 90))
 
-    bar_rect = pygame.Rect(28, 16, bar_width, bar_height)
+    bar_rect = pygame.Rect(36, 24, bar_width, bar_height)
     pygame.draw.rect(overlay, BAR_BG, bar_rect, border_radius=6)
-    label_x = bar_rect.right + 26
+    label_left_x = bar_rect.left - 16
+    label_right_x = bar_rect.right + 34
 
     power_ratio = min(1.0, current_shot_power(state) / MAX_SHOT_SPEED if state.phase == PHASE_AIM else 0.0)
     fill_height = int(bar_height * power_ratio)
@@ -173,31 +174,33 @@ def draw_power_overlay_screen(screen: pygame.Surface, font: pygame.font.Font, st
         fill_rect = pygame.Rect(bar_rect.left, bar_rect.bottom - fill_height, bar_width, fill_height)
         pygame.draw.rect(overlay, BAR_FILL, fill_rect, border_radius=6)
 
+    # Основные деления каждые 0.5 от 0 до 4
+    label_font = pygame.font.SysFont("arial", 16)
+    max_scale = 4.0
+    steps = int(max_scale / 0.5)
+    for i in range(steps + 1):
+        value = i * 0.5
+        ratio = value / max_scale
+        pos_y = bar_rect.bottom - int(bar_height * ratio)
+        pygame.draw.line(overlay, BAR_FILL, (bar_rect.left - 8, pos_y), (bar_rect.right + 8, pos_y), 2)
+        label = label_font.render(f"{value:g}", True, TEXT_COLOR)
+        overlay.blit(label, (label_left_x - label.get_width(), pos_y - label.get_height() // 2))
+
     # Градуировка по "бортам"
     if state.bort_speeds:
         tick_font = pygame.font.SysFont("arial", 14)
         for idx, speed in enumerate(state.bort_speeds, start=1):
             ratio = min(1.0, speed / MAX_SHOT_SPEED)
             pos_y = bar_rect.bottom - int(bar_height * ratio)
-            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 8, pos_y), (bar_rect.right + 12, pos_y), 2)
+            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 12, pos_y), (bar_rect.right + 16, pos_y), 2)
             label = tick_font.render(str(idx), True, TEXT_COLOR)
-            overlay.blit(label, (label_x, pos_y - label.get_height() // 2))
-
-    # Мелкая сетка каждые 0.1
-    for i in range(1, 10):
-        ratio = i / 10.0
-        pos_y = bar_rect.bottom - int(bar_height * ratio)
-        pygame.draw.line(overlay, BAR_FILL, (bar_rect.left - 4, pos_y), (bar_rect.left, pos_y), 1)
-        pygame.draw.line(overlay, BAR_FILL, (bar_rect.right, pos_y), (bar_rect.right + 4, pos_y), 1)
-        if i % 5 == 0:  # подпись каждые 0.5
-            label = font.render(f"{i/10:.1f}", True, TEXT_COLOR)
-            overlay.blit(label, (label_x, pos_y - label.get_height() // 2))
+            overlay.blit(label, (label_right_x, pos_y - label.get_height() // 2))
 
     # Подписи "4 борта" (верх) и "0" (низ)
-    top_label = font.render("4 борта", True, TEXT_COLOR)
-    bottom_label = font.render("0", True, TEXT_COLOR)
-    overlay.blit(top_label, (label_x, bar_rect.top - 6 - top_label.get_height() // 2))
-    overlay.blit(bottom_label, (label_x, bar_rect.bottom - bottom_label.get_height() // 2))
+    top_label = label_font.render("4 борта", True, TEXT_COLOR)
+    bottom_label = label_font.render("0", True, TEXT_COLOR)
+    overlay.blit(top_label, (label_right_x, bar_rect.top - 10 - top_label.get_height() // 2))
+    overlay.blit(bottom_label, (label_right_x, bar_rect.bottom - bottom_label.get_height() // 2))
 
     screen.blit(overlay, (x, y))
 
