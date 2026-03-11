@@ -188,6 +188,9 @@ def draw_power_overlay_screen(screen: pygame.Surface, font: pygame.font.Font, st
         pos_y = bar_rect.bottom - int(bar_height * ratio)
         pygame.draw.line(overlay, BAR_FILL, (bar_rect.left - 4, pos_y), (bar_rect.left, pos_y), 1)
         pygame.draw.line(overlay, BAR_FILL, (bar_rect.right, pos_y), (bar_rect.right + 4, pos_y), 1)
+        if i % 5 == 0:  # подпись каждые 0.5
+            label = font.render(f"{i/10:.1f}", True, TEXT_COLOR)
+            overlay.blit(label, (bar_rect.left - 10 - label.get_width(), pos_y - label.get_height() // 2))
 
     # Подписи "4 борта" (верх) и "0" (низ)
     top_label = font.render("4 борта", True, TEXT_COLOR)
