@@ -41,6 +41,7 @@ class GameState:
     shot_foul: bool = False
     info_message: str = ""
     charge_power: float = 0.0
+    bort_speeds: list[float] = field(default_factory=list)
 
 
 def create_balls() -> list[Ball]:

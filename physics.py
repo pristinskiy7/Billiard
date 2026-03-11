@@ -23,6 +23,7 @@ from geometry import (
     is_in_top_corner_opening,
 )
 from models import Ball, GameState, cue_ball, is_any_ball_moving, target_balls_remaining
+import math
 
 
 def handle_wall_bounce(ball: Ball) -> None:
@@ -251,3 +252,63 @@ def update_physics(state: GameState, dt: float) -> None:
     resolve_ball_collisions(state)
     check_pockets(state)
     settle_round_if_needed(state)
+
+
+def _simulate_center_bort(v0: float, target_bounces: int, dt: float = 0.002) -> bool:
+    """
+    Simulate a straight shot from table center to a short rail and back.
+    Returns True if the ball hits the center after exactly target_bounces bounces.
+    """
+    pos = TABLE_HEIGHT_MM * 0.5
+    vel = -v0  # towards top rail
+    bounces = 0
+    center = TABLE_HEIGHT_MM * 0.5
+
+    for _ in range(int(12 / dt)):  # simulate up to 12 seconds
+        # advance
+        pos += vel * dt
+
+        # rail collision
+        if pos <= 0:
+            pos = -pos
+            vel = abs(vel) * WALL_BOUNCE
+            bounces += 1
+        elif pos >= TABLE_HEIGHT_MM:
+            pos = TABLE_HEIGHT_MM - (pos - TABLE_HEIGHT_MM)
+            vel = -abs(vel) * WALL_BOUNCE
+            bounces += 1
+
+        speed = abs(vel)
+        speed = max(0.0, speed - FRICTION * dt)
+        if speed < MIN_SPEED:
+            break
+        vel = math.copysign(speed, vel)
+
+        # check crossing center after required bounces
+        if bounces == target_bounces:
+            # detect sign change around center crossing
+            if (pos - center) == 0 or ((pos - center) * (pos - center - vel * dt) < 0):
+                return True
+    return False
+
+
+def _solve_bort_speed(target_bounces: int) -> float:
+    low = 50.0
+    high = MAX_SHOT_SPEED
+    for _ in range(22):
+        mid = (low + high) * 0.5
+        if _simulate_center_bort(mid, target_bounces):
+            high = mid
+        else:
+            low = mid
+    return high
+
+
+def compute_bort_speeds(max_borts: int = 4) -> list[float]:
+    speeds = []
+    for b in range(1, max_borts + 1):
+        try:
+            speeds.append(_solve_bort_speed(b))
+        except Exception:
+            break
+    return speeds

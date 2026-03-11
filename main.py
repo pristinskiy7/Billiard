@@ -5,7 +5,7 @@ import pygame
 from constants import FPS, HEIGHT, WIDTH
 from input import accumulate_charge, handle_event
 from models import create_initial_state
-from physics import update_physics
+from physics import compute_bort_speeds, update_physics
 from render import render
 
 
@@ -28,6 +28,7 @@ def main() -> int:
     pan_anchor = (0, 0)
 
     state = create_initial_state()
+    state.bort_speeds = compute_bort_speeds()
     max_frames_raw = os.getenv("BILLIARD_MAX_FRAMES", "").strip()
     max_frames = int(max_frames_raw) if max_frames_raw.isdigit() else None
     frame_count = 0

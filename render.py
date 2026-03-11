@@ -155,11 +155,22 @@ def draw_power_bar(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
     bar_y = HEIGHT - 35
 
     pygame.draw.rect(screen, BAR_BG, (bar_x, bar_y, bar_width, bar_height), border_radius=8)
-    if not state.charging or state.phase != PHASE_AIM:
-        return
-
-    fill = int((current_shot_power(state) / MAX_SHOT_SPEED) * bar_width)
+    power = current_shot_power(state) if state.phase == PHASE_AIM else 0.0
+    fill = int((power / MAX_SHOT_SPEED) * bar_width)
     pygame.draw.rect(screen, BAR_FILL, (bar_x, bar_y, fill, bar_height), border_radius=8)
+
+    # Bort tick marks
+    if state.bort_speeds:
+        for idx, speed in enumerate(state.bort_speeds, start=1):
+            pos = bar_x + int(bar_width * min(speed / MAX_SHOT_SPEED, 1.0))
+            pygame.draw.line(screen, AIM_COLOR, (pos, bar_y - 6), (pos, bar_y + bar_height + 6), 1)
+            label = f"{idx}"
+            screen.blit(
+                pygame.font.SysFont("arial", 14).render(label, True, TEXT_COLOR),
+                (pos - 5, bar_y - 22),
+            )
+    label = "Power (борта)"
+    screen.blit(pygame.font.SysFont("arial", 14).render(label, True, TEXT_COLOR), (bar_x, bar_y - 22))
 
 
 def draw_hud(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:
