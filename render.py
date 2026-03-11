@@ -175,25 +175,27 @@ def draw_power_bar(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
 
 def draw_hud(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:
     if state.phase == PHASE_AIM:
-        status = f"Player {state.current_player + 1} aim"
+        status = f"Игрок {state.current_player + 1} прицеливается"
     elif state.phase == PHASE_MOVING:
-        status = "Balls moving"
+        status = "Шары движутся"
     else:
-        status = state.round_title or "Round over"
+        status = state.round_title or "Раунд окончен"
 
     hud = (
-        f"{status} | Score P1:{state.scores[0]} P2:{state.scores[1]} | "
-        f"Shots: {state.shot_count} | Pocketed total: {state.balls_pocketed} | Fouls: {state.fouls}"
+        f"{status} | Счёт И1:{state.scores[0]} И2:{state.scores[1]} | "
+        f"Удары: {state.shot_count} | Забито всего: {state.balls_pocketed} | Фолы: {state.fouls}"
     )
     screen.blit(font.render(hud, True, TEXT_COLOR), (TABLE_RECT.left, 20))
 
     info = (
         state.info_message
-        or "Hold 1+LMB to set cue. Hold 2 to charge, then LMB click to shoot. Ctrl+wheel zoom, Ctrl+LMB pan."
+        or "1+ЛКМ — выбрать биток. Держите 2 — заряд, затем ЛКМ — удар. Ctrl+колесо — зум, Ctrl+ЛКМ — панорама."
     )
     screen.blit(font.render(info, True, TEXT_COLOR), (TABLE_RECT.left, HEIGHT - 70))
 
-    hint = f"Foul if cue misses contact. Penalty: one of your pocketed balls returns. {MAX_FOULS} fouls ends the round."
+    hint = (
+        f"Фол, если биток не касается шаров. Штраф: один из ваших забитых шаров возвращается. {MAX_FOULS} фолов завершают раунд."
+    )
     screen.blit(font.render(hint, True, TEXT_COLOR), (TABLE_RECT.left, HEIGHT - 40))
 
 
@@ -210,7 +212,7 @@ def draw_round_overlay(
     overlay.fill(OVERLAY_COLOR)
     screen.blit(overlay, (0, 0))
 
-    title = title_font.render(state.round_title or "Round Complete", True, TEXT_COLOR)
+    title = title_font.render(state.round_title or "Раунд завершён", True, TEXT_COLOR)
     message = body_font.render(state.round_message, True, TEXT_COLOR)
     screen.blit(title, title.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 18)))
     screen.blit(message, message.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 18)))

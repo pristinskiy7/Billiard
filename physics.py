@@ -189,7 +189,7 @@ def respot_from_penalty(state: GameState) -> None:
     ball = state.pocketed_by_player[player].pop()
     state.scores[player] = max(0, state.scores[player] - 1)
     place_ball_safely(state, ball, BLACK_START_POS)
-    state.info_message = f"Player {player + 1} foul: respotted ball {ball.name}"
+    state.info_message = f"Фол игрока {player + 1}: шар {ball.name} возвращён на стол"
 
 
 def settle_round_if_needed(state: GameState) -> None:
@@ -205,34 +205,34 @@ def settle_round_if_needed(state: GameState) -> None:
 
     if foul_this_shot:
         if shot_no_contact and not state.shot_foul:
-            state.info_message = "Foul: cue ball made no contact"
+            state.info_message = "Фол: биток не коснулся шаров"
         state.fouls += int(not state.shot_foul)  # only add if not already counted
         respot_from_penalty(state)
 
     if target_balls_remaining(state) == 0:
         winner = 1 if state.scores[1] > state.scores[0] else 0
         if state.scores[0] == state.scores[1]:
-            state.round_title = "Draw"
-            state.round_message = f"Tie game {state.scores[0]}:{state.scores[1]}. Press R to restart."
+            state.round_title = "Ничья"
+            state.round_message = f"Счёт {state.scores[0]}:{state.scores[1]}. Нажмите R, чтобы начать заново."
         else:
-            state.round_title = f"Player {winner + 1} Wins"
+            state.round_title = f"Победа игрока {winner + 1}"
             state.round_message = (
-                f"Final score {state.scores[0]}:{state.scores[1]} in {state.shot_count} shots. Press R to restart."
+                f"Финальный счёт {state.scores[0]}:{state.scores[1]} за {state.shot_count} ударов. Нажмите R для рестарта."
             )
         state.phase = PHASE_ROUND_OVER
         state.charging = False
     elif state.fouls >= MAX_FOULS:
         state.phase = PHASE_ROUND_OVER
-        state.round_title = "Round Lost"
-        state.round_message = f"Too many fouls ({state.fouls}/{MAX_FOULS}). Press R to restart."
+        state.round_title = "Раунд проигран"
+        state.round_message = f"Слишком много фолов ({state.fouls}/{MAX_FOULS}). Нажмите R для рестарта."
         state.charging = False
     else:
         change_turn = foul_this_shot or state.shot_pocketed == 0
         if change_turn:
             state.current_player = 1 - state.current_player
-            state.info_message = f"Player {state.current_player + 1} to shoot"
+            state.info_message = f"Ход игрока {state.current_player + 1}"
         else:
-            state.info_message = f"Player {state.current_player + 1} continues"
+            state.info_message = f"Игрок {state.current_player + 1} продолжает"
         state.phase = PHASE_AIM
         state.charging = False
 
