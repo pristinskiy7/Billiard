@@ -149,28 +149,46 @@ def draw_aim_guide(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
 
 
 def draw_power_bar(screen: pygame.Surface, state: GameState, mouse_pos: tuple[int, int]) -> None:
-    bar_width = 240
-    bar_height = 18
-    bar_x = TABLE_RECT.left
-    bar_y = HEIGHT - 35
+    # Горизонтальный индикатор на столе отключён, используется экранный вертикальный оверлей.
+    return
 
-    pygame.draw.rect(screen, BAR_BG, (bar_x, bar_y, bar_width, bar_height), border_radius=8)
-    power = current_shot_power(state) if state.phase == PHASE_AIM else 0.0
-    fill = int((power / MAX_SHOT_SPEED) * bar_width)
-    pygame.draw.rect(screen, BAR_FILL, (bar_x, bar_y, fill, bar_height), border_radius=8)
 
-    # Bort tick marks
+def draw_power_overlay_screen(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:
+    margin = 18
+    bar_width = 18
+    bar_height = int(screen.get_height() * 0.7)
+    x = margin
+    y = (screen.get_height() - bar_height) // 2
+
+    overlay = pygame.Surface((bar_width + 40, bar_height + 16), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 90))
+
+    bar_rect = pygame.Rect(12, 8, bar_width, bar_height)
+    pygame.draw.rect(overlay, BAR_BG, bar_rect, border_radius=6)
+
+    power_ratio = min(1.0, current_shot_power(state) / MAX_SHOT_SPEED if state.phase == PHASE_AIM else 0.0)
+    fill_height = int(bar_height * power_ratio)
+    if fill_height > 0:
+        fill_rect = pygame.Rect(bar_rect.left, bar_rect.bottom - fill_height, bar_width, fill_height)
+        pygame.draw.rect(overlay, BAR_FILL, fill_rect, border_radius=6)
+
+    # Градуировка по "бортам"
     if state.bort_speeds:
+        tick_font = pygame.font.SysFont("arial", 14)
         for idx, speed in enumerate(state.bort_speeds, start=1):
-            pos = bar_x + int(bar_width * min(speed / MAX_SHOT_SPEED, 1.0))
-            pygame.draw.line(screen, AIM_COLOR, (pos, bar_y - 6), (pos, bar_y + bar_height + 6), 1)
-            label = f"{idx}"
-            screen.blit(
-                pygame.font.SysFont("arial", 14).render(label, True, TEXT_COLOR),
-                (pos - 5, bar_y - 22),
-            )
-    label = "Power (борта)"
-    screen.blit(pygame.font.SysFont("arial", 14).render(label, True, TEXT_COLOR), (bar_x, bar_y - 22))
+            ratio = min(1.0, speed / MAX_SHOT_SPEED)
+            pos_y = bar_rect.bottom - int(bar_height * ratio)
+            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 6, pos_y), (bar_rect.right + 6, pos_y), 1)
+            label = tick_font.render(str(idx), True, TEXT_COLOR)
+            overlay.blit(label, (bar_rect.right + 10, pos_y - 8))
+
+    # Подписи "4 борта" (верх) и "0" (низ)
+    top_label = font.render("4 борта", True, TEXT_COLOR)
+    bottom_label = font.render("0", True, TEXT_COLOR)
+    overlay.blit(top_label, (bar_rect.right + 10, bar_rect.top - 6 - top_label.get_height() // 2))
+    overlay.blit(bottom_label, (bar_rect.right + 10, bar_rect.bottom - bottom_label.get_height() // 2))
+
+    screen.blit(overlay, (x, y))
 
 
 def draw_hud(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:

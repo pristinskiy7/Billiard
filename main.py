@@ -6,7 +6,7 @@ from constants import FPS, HEIGHT, WIDTH
 from input import accumulate_charge, handle_event
 from models import create_initial_state
 from physics import compute_bort_speeds, update_physics
-from render import render
+from render import draw_power_overlay_screen, render
 
 
 def main() -> int:
@@ -84,6 +84,7 @@ def main() -> int:
             scaled = pygame.transform.smoothscale(canvas, (scaled_w, scaled_h))
             screen.fill((0, 0, 0))
             screen.blit(scaled, (offset_x + pan.x, offset_y + pan.y))
+        draw_power_overlay_screen(screen, hud_font, state)
         pygame.display.flip()
 
         frame_count += 1
