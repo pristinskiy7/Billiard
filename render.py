@@ -196,12 +196,6 @@ def draw_power_overlay_screen(screen: pygame.Surface, font: pygame.font.Font, st
             label = tick_font.render(str(idx), True, TEXT_COLOR)
             overlay.blit(label, (label_right_x, pos_y - label.get_height() // 2))
 
-    # Подписи "4 борта" (верх) и "0" (низ)
-    top_label = label_font.render("4 борта", True, TEXT_COLOR)
-    bottom_label = label_font.render("0", True, TEXT_COLOR)
-    overlay.blit(top_label, (label_right_x, bar_rect.top - 10 - top_label.get_height() // 2))
-    overlay.blit(bottom_label, (label_right_x, bar_rect.bottom - bottom_label.get_height() // 2))
-
     screen.blit(overlay, (x, y))
 
 
