@@ -75,7 +75,6 @@ def handle_event(state: GameState, event: pygame.event.Event, mouse_pos: tuple[i
         return True
     if event.type == pygame.KEYUP and event.key == pygame.K_2:
         state.charging = False
-        state.charge_power = 0.0
         return True
 
     if state.phase != PHASE_AIM:

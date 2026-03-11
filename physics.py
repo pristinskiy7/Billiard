@@ -235,6 +235,7 @@ def settle_round_if_needed(state: GameState) -> None:
             state.info_message = f"Игрок {state.current_player + 1} продолжает"
         state.phase = PHASE_AIM
         state.charging = False
+        state.charge_power = 0.0
 
     state.shot_had_contact = False
     state.shot_pocketed = 0
