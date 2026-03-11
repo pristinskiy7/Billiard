@@ -2,7 +2,7 @@ import pygame
 
 from constants import BALL_RADIUS_MM, CHARGE_RATE, MAX_SHOT_SPEED, MIN_SHOT_SPEED, PHASE_AIM, PHASE_MOVING
 from geometry import screen_to_table
-from models import GameState, cue_ball, reset_round
+from models import GameState, cue_ball, enter_calibration_mode, exit_calibration_mode, reset_round
 
 
 def aim_vector(state: GameState, mouse_pos: tuple[int, int]) -> pygame.Vector2:
@@ -62,6 +62,12 @@ def handle_event(state: GameState, event: pygame.event.Event, mouse_pos: tuple[i
 
     if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
         reset_round(state)
+        return True
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_s:
+        if state.calibration_mode:
+            exit_calibration_mode(state)
+        else:
+            enter_calibration_mode(state)
         return True
     if event.type == pygame.KEYDOWN and event.key == pygame.K_2 and state.phase == PHASE_AIM:
         state.charging = True
