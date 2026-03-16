@@ -1,5 +1,9 @@
+# models.py
+
 from dataclasses import dataclass, field
 from copy import deepcopy
+from pathlib import Path
+import json
 
 import pygame
 
@@ -8,11 +12,15 @@ from constants import (
     BALL_DIAMETER_MM,
     BLACK_BALL_COLOR,
     BLACK_START_POS,
+    FRICTION,
     MAX_FOULS,
+    MAX_SHOT_SPEED,
     PHASE_AIM,
     PYRAMID_APEX_POS,
     TABLE_HEIGHT_MM,
     TABLE_WIDTH_MM,
+    WALL_BOUNCE,
+    BALL_COLLISION_DAMP,
 )
 
 
@@ -24,6 +32,34 @@ class Ball:
     color: tuple[int, int, int]
     is_cue: bool
     active: bool = True
+
+
+def default_power_marks() -> list[float]:
+    """
+    Power values for major marks 0..4 on the indicator.
+    Index 0 is always 0.
+    """
+    return [
+        0.0,
+        MAX_SHOT_SPEED * 0.25,
+        MAX_SHOT_SPEED * 0.50,
+        MAX_SHOT_SPEED * 0.75,
+        MAX_SHOT_SPEED,
+    ]
+
+
+def default_calibration_inputs() -> list[str]:
+    marks = default_power_marks()
+    return [
+        f"{marks[4]:.1f}",  # mark 4
+        f"{marks[3]:.1f}",  # mark 3
+        f"{marks[2]:.1f}",  # mark 2
+        f"{marks[1]:.1f}",  # mark 1
+        f"{marks[2]:.1f}",  # arbitrary position (default mid)
+        f"{FRICTION:.1f}",  # cloth friction
+        f"{WALL_BOUNCE:.3f}",  # rail restitution
+        f"{BALL_COLLISION_DAMP:.3f}",  # ball collision loss
+    ]
 
 
 @dataclass
@@ -46,6 +82,68 @@ class GameState:
     charge_power: float = 0.0
     bort_speeds: list[float] = field(default_factory=list)
     calibration_mode: bool = False
+    power_marks: list[float] = field(default_factory=default_power_marks)
+    custom_power: float = MAX_SHOT_SPEED * 0.50
+    custom_ratio: float = 0.50  # position (0..1) for the arbitrary anchor
+    friction: float = FRICTION
+    wall_bounce: float = WALL_BOUNCE
+    collision_loss: float = BALL_COLLISION_DAMP
+    calibration_inputs: list[str] = field(default_factory=default_calibration_inputs)
+    calibration_active_field: int | None = None
+    calibration_dirty: bool = False
+
+
+SETTINGS_PATH = Path("calibration.json")
+
+
+def _format_inputs_from_state(state: GameState) -> list[str]:
+    marks = state.power_marks
+    return [
+        f"{marks[4]:.1f}",
+        f"{marks[3]:.1f}",
+        f"{marks[2]:.1f}",
+        f"{marks[1]:.1f}",
+        f"{state.custom_power:.1f}",
+        f"{state.friction:.2f}",
+        f"{state.wall_bounce:.3f}",
+        f"{state.collision_loss:.3f}",
+    ]
+
+
+def save_calibration(state: GameState) -> None:
+    data = {
+        "power_marks": state.power_marks,
+        "custom_power": state.custom_power,
+        "custom_ratio": state.custom_ratio,
+        "friction": state.friction,
+        "wall_bounce": state.wall_bounce,
+        "collision_loss": state.collision_loss,
+    }
+    SETTINGS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_calibration(state: GameState) -> None:
+    if not SETTINGS_PATH.exists():
+        return
+    try:
+        data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return
+
+    marks = data.get("power_marks")
+    if isinstance(marks, list) and len(marks) == 5:
+        try:
+            state.power_marks = [float(x) for x in marks]
+        except Exception:
+            pass
+
+    state.custom_power = float(data.get("custom_power", state.custom_power))
+    state.custom_ratio = float(data.get("custom_ratio", state.custom_ratio))
+    state.friction = float(data.get("friction", state.friction))
+    state.wall_bounce = float(data.get("wall_bounce", state.wall_bounce))
+    state.collision_loss = float(data.get("collision_loss", state.collision_loss))
+    state.calibration_inputs = _format_inputs_from_state(state)
+    state.calibration_dirty = False
 
 
 def create_balls() -> list[Ball]:
@@ -83,7 +181,9 @@ def create_balls() -> list[Ball]:
 
 
 def create_initial_state() -> GameState:
-    return GameState(balls=create_balls())
+    state = GameState(balls=create_balls())
+    load_calibration(state)
+    return state
 
 
 def reset_round(state: GameState) -> None:

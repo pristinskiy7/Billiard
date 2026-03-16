@@ -1,5 +1,6 @@
-import pygame
+# render.py
 
+import pygame
 from constants import (
     AIM_COLOR,
     BALL_RADIUS,
@@ -34,6 +35,7 @@ from constants import (
 from geometry import mm_rect_to_screen, mm_to_px, table_to_screen
 from input import aim_vector, current_shot_power
 from models import GameState, cue_ball
+from ui import power_bar_geometry, calibration_panel_geometry
 
 
 def draw_corner_pocket_geometry(screen: pygame.Surface) -> None:
@@ -154,50 +156,84 @@ def draw_power_bar(screen: pygame.Surface, state: GameState, mouse_pos: tuple[in
 
 
 def draw_power_overlay_screen(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:
-    margin = 18
-    bar_width = 18
-    bar_height = int(screen.get_height() * 0.7)
-    x = margin
-    y = (screen.get_height() - bar_height) // 2
+    overlay_rect, bar_rect_rel, _ = power_bar_geometry(screen.get_size())
+    bar_width = bar_rect_rel.width
+    bar_height = bar_rect_rel.height
+    x, y = overlay_rect.topleft
 
-    overlay = pygame.Surface((bar_width + 220, bar_height + 48), pygame.SRCALPHA)
+    overlay = pygame.Surface(overlay_rect.size, pygame.SRCALPHA)
     overlay.fill((0, 0, 0, 90))
 
-    bar_rect = pygame.Rect(36, 24, bar_width, bar_height)
+    bar_rect = bar_rect_rel.copy()
     pygame.draw.rect(overlay, BAR_BG, bar_rect, border_radius=6)
-    label_left_x = bar_rect.left - 16
-    label_right_x = bar_rect.right + 34
+    label_left_x = bar_rect.left - 18
 
-    power_ratio = min(1.0, current_shot_power(state) / MAX_SHOT_SPEED if state.phase == PHASE_AIM else 0.0)
-    fill_height = int(bar_height * power_ratio)
+    base_speed = MAX_SHOT_SPEED
+    power_units = (current_shot_power(state) / base_speed) if state.phase == PHASE_AIM else 0.0
+    fill_height = int(bar_height * min(1.0, power_units))
     if fill_height > 0:
         fill_rect = pygame.Rect(bar_rect.left, bar_rect.bottom - fill_height, bar_width, fill_height)
         pygame.draw.rect(overlay, BAR_FILL, fill_rect, border_radius=6)
 
-    # Основные деления каждые 0.5 от 0 до 4
-    label_font = pygame.font.SysFont("arial", 16)
-    max_scale = 4.0
-    steps = int(max_scale / 0.5)
-    for i in range(steps + 1):
-        value = i * 0.5
-        ratio = value / max_scale
-        pos_y = bar_rect.bottom - int(bar_height * ratio)
-        pygame.draw.line(overlay, BAR_FILL, (bar_rect.left - 8, pos_y), (bar_rect.right + 8, pos_y), 2)
-        label = label_font.render(f"{value:g}", True, TEXT_COLOR)
-        overlay.blit(label, (label_left_x - label.get_width(), pos_y - label.get_height() // 2))
+    # Indicator scale: main marks 0-4 with 10 minor ticks per interval.
+    tick_font = pygame.font.SysFont('arial', 14)
 
-    # Градуировка по "бортам"
-    if state.bort_speeds:
-        tick_font = pygame.font.SysFont("arial", 14)
-        for idx, speed in enumerate(state.bort_speeds, start=1):
-            ratio = min(1.0, speed / MAX_SHOT_SPEED)
+    for major in range(5):
+        ratio = major / 4.0
+        pos_y = bar_rect.bottom - int(bar_height * ratio)
+        pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 12, pos_y), (bar_rect.right + 12, pos_y), 2)
+
+        number = tick_font.render(str(major), True, TEXT_COLOR)
+        overlay.blit(number, (label_left_x - number.get_width(), pos_y - number.get_height() // 2))
+
+    for interval_start in range(4):
+        for step in range(1, 10):
+            ratio = (interval_start + step / 10.0) / 4.0
             pos_y = bar_rect.bottom - int(bar_height * ratio)
-            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 12, pos_y), (bar_rect.right + 16, pos_y), 2)
-            label = tick_font.render(str(idx), True, TEXT_COLOR)
-            overlay.blit(label, (label_right_x, pos_y - label.get_height() // 2))
+            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 8, pos_y), (bar_rect.left - 2, pos_y), 1)
+            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.right + 2, pos_y), (bar_rect.right + 8, pos_y), 1)
 
     screen.blit(overlay, (x, y))
 
+
+def draw_calibration_panel(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:
+    panel_rect, field_rects, apply_rect = calibration_panel_geometry()
+    small_font = pygame.font.SysFont("arial", 18)
+
+    pygame.draw.rect(screen, (24, 24, 24), panel_rect, border_radius=8)
+    pygame.draw.rect(screen, (80, 80, 80), panel_rect, width=2, border_radius=8)
+
+    labels = [
+        "Метка 4 (мм/с)",
+        "Метка 3 (мм/с)",
+        "Метка 2 (мм/с)",
+        "Метка 1 (мм/с)",
+        "Произвольная позиция (мм/с)",
+        "Коэффициент торможения",
+        "Восстановление борта",
+        "Потеря энергии шаров",
+    ]
+
+    for idx, rect in enumerate(field_rects):
+        label = labels[idx]
+        label_surf = small_font.render(label, True, TEXT_COLOR)
+        screen.blit(label_surf, (rect.x, rect.y - label_surf.get_height() - 2))
+
+        pygame.draw.rect(screen, BAR_BG, rect, border_radius=4)
+        if state.calibration_active_field == idx:
+            pygame.draw.rect(screen, AIM_COLOR, rect, width=2, border_radius=4)
+        else:
+            pygame.draw.rect(screen, (120, 120, 120), rect, width=1, border_radius=4)
+
+        value = state.calibration_inputs[idx] if idx < len(state.calibration_inputs) else ""
+        text_surf = small_font.render(value, True, TEXT_COLOR)
+        screen.blit(text_surf, (rect.x + 6, rect.y + (rect.height - text_surf.get_height()) // 2))
+
+    button_color = BAR_FILL if state.calibration_dirty else AIM_COLOR
+    pygame.draw.rect(screen, button_color, apply_rect, border_radius=6)
+    pygame.draw.rect(screen, (40, 40, 40), apply_rect, width=2, border_radius=6)
+    btn_text = small_font.render("Применить", True, (10, 10, 10))
+    screen.blit(btn_text, (apply_rect.centerx - btn_text.get_width() // 2, apply_rect.centery - btn_text.get_height() // 2))
 
 def draw_hud(screen: pygame.Surface, font: pygame.font.Font, state: GameState) -> None:
     if state.phase == PHASE_AIM:
@@ -254,6 +290,7 @@ def render(
     draw_table(screen)
     draw_balls(screen, state)
     draw_aim_guide(screen, state, mouse_pos)
-    draw_power_bar(screen, state, mouse_pos)
+    if state.calibration_mode:
+        draw_calibration_panel(screen, hud_font, state)
     draw_hud(screen, hud_font, state)
     draw_round_overlay(screen, title_font, hud_font, state)

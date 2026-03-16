@@ -1,3 +1,5 @@
+# physics.py
+
 import pygame
 
 from constants import (
@@ -6,6 +8,7 @@ from constants import (
     BALL_RADIUS_MM,
     BLACK_START_POS,
     FRICTION,
+    MAX_SHOT_SPEED,
     MAX_FOULS,
     MIN_SPEED,
     PHASE_AIM,
@@ -26,32 +29,32 @@ from models import Ball, GameState, cue_ball, is_any_ball_moving, target_balls_r
 import math
 
 
-def handle_wall_bounce(ball: Ball) -> None:
+def handle_wall_bounce(ball: Ball, wall_bounce: float) -> None:
     if ball.pos.x - BALL_RADIUS_MM < 0:
         if is_in_left_corner_opening(ball):
             ball.pos.x = min(ball.pos.x, 0)
         else:
             ball.pos.x = BALL_RADIUS_MM
-            ball.vel.x = abs(ball.vel.x) * WALL_BOUNCE
+            ball.vel.x = abs(ball.vel.x) * wall_bounce
     elif ball.pos.x + BALL_RADIUS_MM > TABLE_WIDTH_MM:
         if is_in_right_corner_opening(ball):
             ball.pos.x = max(ball.pos.x, TABLE_WIDTH_MM)
         else:
             ball.pos.x = TABLE_WIDTH_MM - BALL_RADIUS_MM
-            ball.vel.x = -abs(ball.vel.x) * WALL_BOUNCE
+            ball.vel.x = -abs(ball.vel.x) * wall_bounce
 
     if ball.pos.y - BALL_RADIUS_MM < 0:
         if is_in_top_corner_opening(ball):
             ball.pos.y = min(ball.pos.y, 0)
         else:
             ball.pos.y = BALL_RADIUS_MM
-            ball.vel.y = abs(ball.vel.y) * WALL_BOUNCE
+            ball.vel.y = abs(ball.vel.y) * wall_bounce
     elif ball.pos.y + BALL_RADIUS_MM > TABLE_HEIGHT_MM:
         if is_in_bottom_corner_opening(ball):
             ball.pos.y = max(ball.pos.y, TABLE_HEIGHT_MM)
         else:
             ball.pos.y = TABLE_HEIGHT_MM - BALL_RADIUS_MM
-            ball.vel.y = -abs(ball.vel.y) * WALL_BOUNCE
+            ball.vel.y = -abs(ball.vel.y) * wall_bounce
 
 
 def is_position_free(state: GameState, pos: pygame.Vector2) -> bool:
@@ -102,15 +105,15 @@ def place_cue_ball(state: GameState) -> None:
     place_ball_safely(state, cue, BLACK_START_POS)
 
 
-def update_ball(ball: Ball, dt: float) -> None:
+def update_ball(state: GameState, ball: Ball, dt: float) -> None:
     speed = ball.vel.length()
     if speed <= 0:
         return
 
     ball.pos += ball.vel * dt
-    handle_wall_bounce(ball)
+    handle_wall_bounce(ball, state.wall_bounce)
 
-    new_speed = max(0.0, speed - FRICTION * dt)
+    new_speed = max(0.0, speed - state.friction * dt)
     if new_speed < MIN_SPEED:
         ball.vel.update(0, 0)
     else:
@@ -156,8 +159,8 @@ def resolve_ball_collisions(state: GameState) -> None:
 
             ball_a.vel += (v2n - v1n) * normal
             ball_b.vel += (v1n - v2n) * normal
-            ball_a.vel *= BALL_COLLISION_DAMP
-            ball_b.vel *= BALL_COLLISION_DAMP
+            ball_a.vel *= state.collision_loss
+            ball_b.vel *= state.collision_loss
 
 
 def check_pockets(state: GameState) -> None:
@@ -248,7 +251,7 @@ def update_physics(state: GameState, dt: float) -> None:
 
     for ball in state.balls:
         if ball.active:
-            update_ball(ball, dt)
+            update_ball(state, ball, dt)
 
     resolve_ball_collisions(state)
     check_pockets(state)

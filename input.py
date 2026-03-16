@@ -1,8 +1,18 @@
+# input.py
+
 import pygame
 
-from constants import BALL_RADIUS_MM, CHARGE_RATE, MAX_SHOT_SPEED, MIN_SHOT_SPEED, PHASE_AIM, PHASE_MOVING
+from constants import BALL_RADIUS_MM, MAX_SHOT_SPEED, MIN_SHOT_SPEED, PHASE_AIM, PHASE_MOVING
 from geometry import screen_to_table
-from models import GameState, cue_ball, enter_calibration_mode, exit_calibration_mode, reset_round
+from models import (
+    GameState,
+    cue_ball,
+    enter_calibration_mode,
+    exit_calibration_mode,
+    reset_round,
+    save_calibration,
+)
+from ui import power_bar_geometry, calibration_panel_geometry
 
 
 def aim_vector(state: GameState, mouse_pos: tuple[int, int]) -> pygame.Vector2:
@@ -10,13 +20,125 @@ def aim_vector(state: GameState, mouse_pos: tuple[int, int]) -> pygame.Vector2:
 
 
 def current_shot_power(state: GameState) -> float:
-    return min(state.charge_power, MAX_SHOT_SPEED)
+    return state.charge_power
+
+
+def _set_power_from_bar_click(state: GameState, click_pos: tuple[int, int], screen_size: tuple[int, int]) -> bool:
+    """
+    Устанавливает силу удара по клику в вертикальный индикатор.
+    click_pos — экранные координаты (event.pos).
+    Возвращает True, если клик был по шкале и сила выставлена.
+    """
+    _, bar_rect_rel, bar_rect_abs = power_bar_geometry(screen_size)
+    if not bar_rect_abs.collidepoint(click_pos):
+        return False
+
+    ratio = (bar_rect_abs.bottom - click_pos[1]) / bar_rect_rel.height
+    ratio = max(0.0, min(1.0, ratio))
+    state.charge_power = power_speed_from_ratio(state, ratio)
+    return True
+
+
+def power_speed_from_ratio(state: GameState, ratio: float) -> float:
+    """
+    Convert indicator ratio (0..1) to initial speed using calibrated anchors.
+    Major marks are fixed at ratios 0, 0.25, 0.5, 0.75, 1.0.
+    An extra anchor is placed at state.custom_ratio.
+    """
+    anchors = [
+        (0.0, 0.0),
+        (0.25, state.power_marks[1]),
+        (0.50, state.power_marks[2]),
+        (0.75, state.power_marks[3]),
+        (1.0, state.power_marks[4]),
+        (max(0.0, min(1.0, state.custom_ratio)), state.custom_power),
+    ]
+    anchors = sorted(anchors, key=lambda pair: pair[0])
+
+    ratio = max(0.0, min(1.0, ratio))
+    for idx in range(len(anchors) - 1):
+        r0, v0 = anchors[idx]
+        r1, v1 = anchors[idx + 1]
+        if ratio <= r1:
+            if r1 == r0:
+                return v1
+            t = (ratio - r0) / (r1 - r0)
+            return v0 + (v1 - v0) * t
+    return anchors[-1][1]
+
+
+def _apply_calibration_inputs(state: GameState) -> None:
+    try:
+        mark4 = float(state.calibration_inputs[0])
+        mark3 = float(state.calibration_inputs[1])
+        mark2 = float(state.calibration_inputs[2])
+        mark1 = float(state.calibration_inputs[3])
+        custom = float(state.calibration_inputs[4])
+        friction = float(state.calibration_inputs[5])
+        wall = float(state.calibration_inputs[6])
+        collision = float(state.calibration_inputs[7])
+    except (ValueError, IndexError):
+        return
+
+    state.power_marks = [0.0, mark1, mark2, mark3, mark4]
+    state.custom_power = max(0.0, custom)
+    state.friction = max(0.0, friction)
+    state.wall_bounce = max(0.0, wall)
+    state.collision_loss = max(0.0, collision)
+    # Normalize input strings to tidy formatting
+    state.calibration_inputs = [
+        f"{mark4:.1f}",
+        f"{mark3:.1f}",
+        f"{mark2:.1f}",
+        f"{mark1:.1f}",
+        f"{state.custom_power:.1f}",
+        f"{state.friction:.2f}",
+        f"{state.wall_bounce:.3f}",
+        f"{state.collision_loss:.3f}",
+    ]
+    state.calibration_dirty = False
+    save_calibration(state)
+
+
+def _handle_calibration_ui(state: GameState, event: pygame.event.Event, mouse_pos: tuple[int, int]) -> bool:
+    panel_rect, field_rects, apply_rect = calibration_panel_geometry()
+
+    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        for idx, rect in enumerate(field_rects):
+            if rect.collidepoint(mouse_pos):
+                state.calibration_active_field = idx
+                return True
+        if apply_rect.collidepoint(mouse_pos):
+            _apply_calibration_inputs(state)
+            return True
+        state.calibration_active_field = None
+        return False
+
+    if event.type == pygame.KEYDOWN and state.calibration_active_field is not None:
+        idx = state.calibration_active_field
+        if event.key == pygame.K_TAB:
+            state.calibration_active_field = (idx + 1) % len(field_rects)
+            return True
+        if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            _apply_calibration_inputs(state)
+            return True
+        if event.key == pygame.K_BACKSPACE:
+            state.calibration_inputs[idx] = state.calibration_inputs[idx][:-1]
+            state.calibration_dirty = True
+            return True
+        # Accept digits, dot and minus
+        ch = event.unicode
+        if ch and (ch.isdigit() or ch in ".-"):
+            state.calibration_inputs[idx] += ch
+            state.calibration_dirty = True
+            return True
+    return False
 
 
 def accumulate_charge(state: GameState, dt: float) -> None:
-    if not state.charging:
-        return
-    state.charge_power = min(MAX_SHOT_SPEED, state.charge_power + CHARGE_RATE * dt)
+    # Режим "удерживать 2 для зарядки" больше не используется; сила ставится кликом.
+    # Оставляем функцию для совместимости вызова в main, но она ничего не делает.
+    return
 
 
 def strike_cue_ball(state: GameState, mouse_pos: tuple[int, int]) -> None:
@@ -69,18 +191,19 @@ def handle_event(state: GameState, event: pygame.event.Event, mouse_pos: tuple[i
         else:
             enter_calibration_mode(state)
         return True
-    if event.type == pygame.KEYDOWN and event.key == pygame.K_2 and state.phase == PHASE_AIM:
-        state.charging = True
-        state.charge_power = 0.0
-        return True
-    if event.type == pygame.KEYUP and event.key == pygame.K_2:
-        state.charging = False
-        return True
-
+    if state.calibration_mode:
+        if _handle_calibration_ui(state, event, mouse_pos):
+            return True
     if state.phase != PHASE_AIM:
         return True
 
     if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        # С зажатой клавишей "2" клик по шкале ставит силу удара.
+        if keys[pygame.K_2]:
+            screen_size = pygame.display.get_surface().get_size()
+            if _set_power_from_bar_click(state, event.pos, screen_size):
+                return True
+
         if keys[pygame.K_1]:
             select_cue_ball(state, mouse_pos)
         else:
