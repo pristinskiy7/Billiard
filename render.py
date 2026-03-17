@@ -33,7 +33,7 @@ from constants import (
     PHASE_ROUND_OVER,
 )
 from geometry import mm_rect_to_screen, mm_to_px, table_to_screen
-from input import aim_vector, current_shot_power
+from input import aim_vector, current_shot_power, power_ratio_from_speed
 from models import GameState, cue_ball
 from ui import power_bar_geometry, calibration_panel_geometry
 
@@ -166,32 +166,50 @@ def draw_power_overlay_screen(screen: pygame.Surface, font: pygame.font.Font, st
 
     bar_rect = bar_rect_rel.copy()
     pygame.draw.rect(overlay, BAR_BG, bar_rect, border_radius=6)
-    label_left_x = bar_rect.left - 18
 
-    base_speed = MAX_SHOT_SPEED
-    power_units = (current_shot_power(state) / base_speed) if state.phase == PHASE_AIM else 0.0
+    power_units = power_ratio_from_speed(state, current_shot_power(state)) if state.phase == PHASE_AIM else 0.0
     fill_height = int(bar_height * min(1.0, power_units))
     if fill_height > 0:
         fill_rect = pygame.Rect(bar_rect.left, bar_rect.bottom - fill_height, bar_width, fill_height)
         pygame.draw.rect(overlay, BAR_FILL, fill_rect, border_radius=6)
 
-    # Indicator scale: main marks 0-4 with 10 minor ticks per interval.
-    tick_font = pygame.font.SysFont('arial', 14)
+    # Шкала с равными по высоте сегментами A–B–C–D–E и разными значениями.
+    tick_font = pygame.font.SysFont("arial", 14)
+    major_marks = [
+        ("", 0, 0.00),
+        ("", 1500, 0.25),
+        ("", 2100, 0.50),
+        ("", 2600, 0.75),
+        ("", 3100, 1.00),
+    ]
+    minor_per_segment = 8  # количество мелких штрихов внутри каждого сегмента
 
-    for major in range(5):
-        ratio = major / 4.0
-        pos_y = bar_rect.bottom - int(bar_height * ratio)
-        pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 12, pos_y), (bar_rect.right + 12, pos_y), 2)
-
-        number = tick_font.render(str(major), True, TEXT_COLOR)
-        overlay.blit(number, (label_left_x - number.get_width(), pos_y - number.get_height() // 2))
-
-    for interval_start in range(4):
-        for step in range(1, 10):
-            ratio = (interval_start + step / 10.0) / 4.0
+    for idx in range(len(major_marks) - 1):
+        start_ratio = major_marks[idx][2]
+        end_ratio = major_marks[idx + 1][2]
+        for step in range(1, minor_per_segment):
+            ratio = start_ratio + (end_ratio - start_ratio) * step / minor_per_segment
             pos_y = bar_rect.bottom - int(bar_height * ratio)
-            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 8, pos_y), (bar_rect.left - 2, pos_y), 1)
-            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.right + 2, pos_y), (bar_rect.right + 8, pos_y), 1)
+            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 7, pos_y), (bar_rect.left - 2, pos_y), 1)
+            pygame.draw.line(overlay, AIM_COLOR, (bar_rect.right + 2, pos_y), (bar_rect.right + 7, pos_y), 1)
+
+    label_texts = {
+        0: "",
+        1500: "1 борт",
+        2100: "2 борта",
+        2600: "3 борта",
+        3100: "4 борта",
+    }
+
+    for letter, value, ratio in major_marks:
+        pos_y = bar_rect.bottom - int(bar_height * ratio)
+        pygame.draw.line(overlay, AIM_COLOR, (bar_rect.left - 14, pos_y), (bar_rect.right + 14, pos_y), 2)
+        if letter:
+            lbl_left = tick_font.render(letter, True, TEXT_COLOR)
+            overlay.blit(lbl_left, (bar_rect.left - 26 - lbl_left.get_width(), pos_y - lbl_left.get_height() // 2))
+        lbl = label_texts.get(value, str(int(value)))
+        lbl_right = tick_font.render(lbl, True, TEXT_COLOR)
+        overlay.blit(lbl_right, (bar_rect.right + 18, pos_y - lbl_right.get_height() // 2))
 
     screen.blit(overlay, (x, y))
 
@@ -204,11 +222,11 @@ def draw_calibration_panel(screen: pygame.Surface, font: pygame.font.Font, state
     pygame.draw.rect(screen, (80, 80, 80), panel_rect, width=2, border_radius=8)
 
     labels = [
-        "Метка 4 (мм/с)",
-        "Метка 3 (мм/с)",
-        "Метка 2 (мм/с)",
-        "Метка 1 (мм/с)",
-        "Произвольная позиция (мм/с)",
+        "1 борт",
+        "2 борта",
+        "3 борта",
+        "4 борта",
+        "Сила удара",
         "Коэффициент торможения",
         "Восстановление борта",
         "Потеря энергии шаров",

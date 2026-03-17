@@ -40,21 +40,21 @@ def default_power_marks() -> list[float]:
     Index 0 is always 0.
     """
     return [
-        0.0,
-        MAX_SHOT_SPEED * 0.25,
-        MAX_SHOT_SPEED * 0.50,
-        MAX_SHOT_SPEED * 0.75,
-        MAX_SHOT_SPEED,
+        0.0,     # A
+        1500.0,  # B
+        2100.0,  # C
+        2600.0,  # D
+        3100.0,  # E
     ]
 
 
 def default_calibration_inputs() -> list[str]:
     marks = default_power_marks()
     return [
-        f"{marks[4]:.1f}",  # mark 4
-        f"{marks[3]:.1f}",  # mark 3
-        f"{marks[2]:.1f}",  # mark 2
-        f"{marks[1]:.1f}",  # mark 1
+        f"{marks[1]:.1f}",  # B
+        f"{marks[2]:.1f}",  # C
+        f"{marks[3]:.1f}",  # D
+        f"{marks[4]:.1f}",  # E
         f"{marks[2]:.1f}",  # arbitrary position (default mid)
         f"{FRICTION:.1f}",  # cloth friction
         f"{WALL_BOUNCE:.3f}",  # rail restitution
@@ -83,7 +83,7 @@ class GameState:
     bort_speeds: list[float] = field(default_factory=list)
     calibration_mode: bool = False
     power_marks: list[float] = field(default_factory=default_power_marks)
-    custom_power: float = MAX_SHOT_SPEED * 0.50
+    custom_power: float = 2100.0
     custom_ratio: float = 0.50  # position (0..1) for the arbitrary anchor
     friction: float = FRICTION
     wall_bounce: float = WALL_BOUNCE
@@ -99,10 +99,10 @@ SETTINGS_PATH = Path("calibration.json")
 def _format_inputs_from_state(state: GameState) -> list[str]:
     marks = state.power_marks
     return [
-        f"{marks[4]:.1f}",
-        f"{marks[3]:.1f}",
-        f"{marks[2]:.1f}",
         f"{marks[1]:.1f}",
+        f"{marks[2]:.1f}",
+        f"{marks[3]:.1f}",
+        f"{marks[4]:.1f}",
         f"{state.custom_power:.1f}",
         f"{state.friction:.2f}",
         f"{state.wall_bounce:.3f}",

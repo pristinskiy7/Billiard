@@ -23,6 +23,37 @@ def current_shot_power(state: GameState) -> float:
     return state.charge_power
 
 
+def power_ratio_from_speed(state: GameState, speed: float) -> float:
+    """
+    Обратное преобразование: скорость -> доля шкалы (0..1) с учётом
+    фиксированных по высоте сегментов A-B, B-C, C-D, D-E.
+    """
+    speeds = [
+        0.0,
+        state.power_marks[1] if state.power_marks else 1500.0,  # B
+        state.power_marks[2] if state.power_marks else 2100.0,  # C
+        state.power_marks[3] if state.power_marks else 2600.0,  # D
+        state.power_marks[4] if state.power_marks else 3100.0,  # E
+    ]
+
+    speed = max(0.0, min(speed, speeds[-1]))
+
+    segments = [
+        (0.00, 0.25, speeds[0], speeds[1]),  # A-B
+        (0.25, 0.50, speeds[1], speeds[2]),  # B-C
+        (0.50, 0.75, speeds[2], speeds[3]),  # C-D
+        (0.75, 1.00, speeds[3], speeds[4]),  # D-E
+    ]
+
+    for start, end, v0, v1 in segments:
+        if speed <= v1 or v1 == v0:
+            if v1 == v0:
+                return end
+            t = (speed - v0) / (v1 - v0)
+            return start + (end - start) * t
+    return 1.0
+
+
 def _set_power_from_bar_click(state: GameState, click_pos: tuple[int, int], screen_size: tuple[int, int]) -> bool:
     """
     Устанавливает силу удара по клику в вертикальный индикатор.
@@ -33,46 +64,55 @@ def _set_power_from_bar_click(state: GameState, click_pos: tuple[int, int], scre
     if not bar_rect_abs.collidepoint(click_pos):
         return False
 
-    ratio = (bar_rect_abs.bottom - click_pos[1]) / bar_rect_rel.height
-    ratio = max(0.0, min(1.0, ratio))
-    state.charge_power = power_speed_from_ratio(state, ratio)
+    ratio_total = (bar_rect_abs.bottom - click_pos[1]) / bar_rect_rel.height
+    ratio_total = max(0.0, min(1.0, ratio_total))
+    state.charge_power = power_speed_from_ratio(state, ratio_total)
     return True
 
 
 def power_speed_from_ratio(state: GameState, ratio: float) -> float:
     """
-    Convert indicator ratio (0..1) to initial speed using calibrated anchors.
-    Major marks are fixed at ratios 0, 0.25, 0.5, 0.75, 1.0.
-    An extra anchor is placed at state.custom_ratio.
+    Преобразует общую долю по шкале (0..1) в скорость удара с учётом
+    четырёх линейных сегментов A-B, B-C, C-D, D-E одинаковой высоты.
+    Диапазоны значений по сегментам (мм/с):
+      A-B: 0 → 1500
+      B-C: 1500 → 2100
+      C-D: 2100 → 2600
+      D-E: 2600 → 3100
+    Значения в точках B–E могут быть скорректированы калибровкой
+    (power_marks[1..4]), но визуальные сегменты остаются равными.
     """
-    anchors = [
-        (0.0, 0.0),
-        (0.25, state.power_marks[1]),
-        (0.50, state.power_marks[2]),
-        (0.75, state.power_marks[3]),
-        (1.0, state.power_marks[4]),
-        (max(0.0, min(1.0, state.custom_ratio)), state.custom_power),
-    ]
-    anchors = sorted(anchors, key=lambda pair: pair[0])
-
     ratio = max(0.0, min(1.0, ratio))
-    for idx in range(len(anchors) - 1):
-        r0, v0 = anchors[idx]
-        r1, v1 = anchors[idx + 1]
-        if ratio <= r1:
-            if r1 == r0:
-                return v1
-            t = (ratio - r0) / (r1 - r0)
+
+    # Опорные скорости в точках A..E (A всегда 0).
+    speeds = [
+        0.0,
+        state.power_marks[1] if state.power_marks else 1500.0,  # B
+        state.power_marks[2] if state.power_marks else 2100.0,  # C
+        state.power_marks[3] if state.power_marks else 2600.0,  # D
+        state.power_marks[4] if state.power_marks else 3100.0,  # E
+    ]
+
+    segments = [
+        (0.00, 0.25, speeds[0], speeds[1]),  # A-B
+        (0.25, 0.50, speeds[1], speeds[2]),  # B-C
+        (0.50, 0.75, speeds[2], speeds[3]),  # C-D
+        (0.75, 1.00, speeds[3], speeds[4]),  # D-E
+    ]
+
+    for start, end, v0, v1 in segments:
+        if ratio <= end:
+            t = (ratio - start) / (end - start) if end > start else 0.0
             return v0 + (v1 - v0) * t
-    return anchors[-1][1]
+    return speeds[-1]
 
 
 def _apply_calibration_inputs(state: GameState) -> None:
     try:
-        mark4 = float(state.calibration_inputs[0])
-        mark3 = float(state.calibration_inputs[1])
-        mark2 = float(state.calibration_inputs[2])
-        mark1 = float(state.calibration_inputs[3])
+        mark_b = float(state.calibration_inputs[0])
+        mark_c = float(state.calibration_inputs[1])
+        mark_d = float(state.calibration_inputs[2])
+        mark_e = float(state.calibration_inputs[3])
         custom = float(state.calibration_inputs[4])
         friction = float(state.calibration_inputs[5])
         wall = float(state.calibration_inputs[6])
@@ -80,17 +120,18 @@ def _apply_calibration_inputs(state: GameState) -> None:
     except (ValueError, IndexError):
         return
 
-    state.power_marks = [0.0, mark1, mark2, mark3, mark4]
+    state.power_marks = [0.0, mark_b, mark_c, mark_d, mark_e]
     state.custom_power = max(0.0, custom)
+    state.charge_power = state.custom_power  # заполняем индикатор и используем это значение для следующего удара
     state.friction = max(0.0, friction)
     state.wall_bounce = max(0.0, wall)
     state.collision_loss = max(0.0, collision)
     # Normalize input strings to tidy formatting
     state.calibration_inputs = [
-        f"{mark4:.1f}",
-        f"{mark3:.1f}",
-        f"{mark2:.1f}",
-        f"{mark1:.1f}",
+        f"{mark_b:.1f}",
+        f"{mark_c:.1f}",
+        f"{mark_d:.1f}",
+        f"{mark_e:.1f}",
         f"{state.custom_power:.1f}",
         f"{state.friction:.2f}",
         f"{state.wall_bounce:.3f}",

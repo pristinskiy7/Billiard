@@ -32,7 +32,7 @@ def calibration_panel_geometry() -> tuple[pygame.Rect, list[pygame.Rect], pygame
     """
     panel_w = 220
     field_h = 34
-    gap = 12
+    gap = 18
     padding = 12
 
     x = min(WIDTH - panel_w - 20, TABLE_RECT.right + 30)
@@ -51,7 +51,7 @@ def calibration_panel_geometry() -> tuple[pygame.Rect, list[pygame.Rect], pygame
 
     button_w = 140
     button_h = 32
-    panel_h = padding * 2 + (field_h + gap) * 8 + button_h + 6
+    panel_h = padding * 2 + (field_h + gap) * 8 + button_h + 6 - gap  # последний ряд без лишнего зазора
     panel_rect = pygame.Rect(x, y, panel_w, panel_h)
 
     apply_rect = pygame.Rect(
